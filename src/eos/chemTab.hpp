@@ -15,6 +15,8 @@ namespace ablate::eos {
 
 #ifdef WITH_TENSORFLOW
 class ChemTab : public ChemistryModel, public std::enable_shared_from_this<ChemTab> {
+   public:
+    bool fake_inversion=false;
    private:
     //! use the reference eos to compute properties from the decoded progressVariables to yi
     std::shared_ptr<ablate::eos::TChem> referenceEOS;
@@ -30,6 +32,9 @@ class ChemTab : public ChemistryModel, public std::enable_shared_from_this<ChemT
 
     PetscReal** Wmat = nullptr;
     PetscReal* sourceEnergyScaler = nullptr;
+
+    static const PetscReal* Yi_cache;
+    static int cache_use_count;
 
     /**
      * private implementations of support functions

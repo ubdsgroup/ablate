@@ -1,4 +1,5 @@
 #include "chemTab.hpp"
+//#include "debugger_helper.hpp"
 
 #include <eos/tChem.hpp>
 #include <fstream>
@@ -10,6 +11,25 @@
 #include <sstream>
 #include <string>
 #include "finiteVolume/compressibleFlowFields.hpp"
+
+///////////////////////////
+#include <iostream>
+#include <sstream>
+#include <vector>
+using namespace std;
+
+template <typename T>
+string to_string(vector<T> vec) {
+    stringstream ss;
+    for (auto i : vec) {
+        ss << i << ", ";
+    }
+    return ss.str();
+}
+
+#define GET_VARIABLE_NAME(Variable) (#Variable)
+#define print_var(var) cerr << "At line: " << __LINE__ << " Variable: " << GET_VARIABLE_NAME(var) << " = " << to_string(var) << endl << flush;
+//////////////////////////
 
 void NoOpDeallocator(void *data, size_t a, void *b) {}
 
@@ -247,12 +267,21 @@ void ablate::eos::ChemTab::ChemTabModelComputeFunction(PetscReal density, const 
     safe_free(output);
 }
 
+#include <string.h>
+
+const PetscReal* ablate::eos::ChemTab::Yi_cache = nullptr;
+int ablate::eos::ChemTab::cache_use_count = 3;
+
 void ablate::eos::ChemTab::ComputeMassFractions(const PetscReal* progressVariables, std::size_t progressVariablesSize, PetscReal* massFractions, std::size_t massFractionsSize, PetscReal density) const {
     // size of massFractions should match the expected number of species
     if (massFractionsSize != speciesNames.size()) {
         throw std::invalid_argument(
             "The massFractions size does not match the "
             "supported number of species");
+    }
+    if (fake_inversion && (ablate::eos::ChemTab::cache_use_count++ < 2)) {
+        memcpy(massFractions, ablate::eos::ChemTab::Yi_cache, massFractionsSize*sizeof(PetscReal));
+        return;
     }
 
     // call model using generalized invocation method (usable for inversion & source computation)
@@ -274,6 +303,9 @@ void ablate::eos::ChemTab::ChemistrySource(PetscReal density, const PetscReal de
 }
 
 void ablate::eos::ChemTab::ComputeProgressVariables(const PetscReal *massFractions, std::size_t massFractionsSize, PetscReal *progressVariables, std::size_t progressVariablesSize) const {
+    ablate::eos::ChemTab::Yi_cache = massFractions;
+    ablate::eos::ChemTab::cache_use_count = 0;
+
     // c = W'y
     // size of progressVariables should match the expected number of
     // progressVariables

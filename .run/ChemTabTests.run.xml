@@ -1,0 +1,8 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="ChemTabTests" type="CMakeGoogleTestRunConfigurationType" factoryName="Google Test" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="ablateLibrary" TARGET_NAME="unitTests" CONFIG_NAME="local-ablate-debug" RUN_TARGET_PROJECT_NAME="ablateLibrary" RUN_TARGET_NAME="unitTests" TEST_PATTERN="ChemTab*" TEST_MODE="PATTERN">
+    <method v="2">
+      <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+      <option name="BeforeTestRunTask" enabled="true" />
+    </method>
+  </configuration>
+</component>
