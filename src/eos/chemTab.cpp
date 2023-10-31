@@ -152,6 +152,13 @@ void ablate::eos::ChemTab::LoadBasisVectors(std::istream &inputStream, std::size
 #define safe_free(ptr) \
     if (ptr != NULL) free(ptr)
 
+// designed for adding/removing density coefficient (i.e. conserved form)
+inline void multMemCpy(PetscReal dst[], PetscReal src[], const int size, const PetscReal coef) {
+    for (int i=0; i < size; i++) {
+        dst[i]=src[i]*coef;
+    }
+}
+
 void ablate::eos::ChemTab::ChemTabModelComputeFunction(PetscReal density, const PetscReal densityProgressVariables[], PetscReal *densityEnergySource,
                                                        PetscReal *densityProgressVariableSource, PetscReal *densityMassFractions) const {
     //********* Get Input tensor
@@ -235,6 +242,25 @@ void ablate::eos::ChemTab::ComputeMassFractions(const PetscReal *densityProgress
     ChemTabModelComputeFunction(density, densityProgressVariables, nullptr, nullptr, densityMassFractions);
 }
 
+//void ablate::eos::ChemTab::ComputeMassFractions(PetscReal *densityProgressVariables, PetscReal *densityMassFractions, const PetscReal density) const {
+//    // call model using generalized invocation method (usable for inversion & source computation)
+//    ComputeMassFractions((const PetscReal*) densityProgressVariables, densityMassFractions, density);
+//}
+
+//void ablate::eos::ChemTab::ComputeMassFractions(PetscReal *densityProgressVariables, PetscReal *densityMassFractions, const PetscReal density) const {
+//    // call model using generalized invocation method (usable for inversion & source computation)
+//    ChemTabModelComputeFunction(density, densityProgressVariables, nullptr, nullptr, densityMassFractions);
+//
+//    // We also want to apply Yi L1 constraint to the progress variables now, so that things remain physical.
+//    PetscReal* progressVariables = new PetscReal[progressVariablesNames.size()];
+//    PetscReal* massFractions = new PetscReal[speciesNames.size()];
+//    multMemCpy(massFractions, densityMassFractions, speciesNames.size(), 1/density);
+//    ComputeProgressVariables(massFractions, progressVariables);
+//    multMemCpy(densityProgressVariables, progressVariables, progressVariablesNames.size(), density);
+//    delete[] progressVariables;
+//    delete[] massFractions;
+//}
+
 void ablate::eos::ChemTab::ComputeMassFractions(std::vector<PetscReal> &progressVariables, std::vector<PetscReal> &massFractions, PetscReal density) const {
     if (progressVariables.size() != progressVariablesNames.size()) {
         throw std::invalid_argument(
@@ -290,14 +316,40 @@ inline void print_array(std::string prefix, PetscReal* array, const int n) {
 
 void ablate::eos::ChemTab::ChemistrySource(const PetscReal density, const PetscReal densityProgressVariables[],
                                            PetscReal *densityEnergySource, PetscReal *densityProgressVariableSource) const {
+
+    // doesn't take time to allocate
+    PetscReal densityMassFractions[speciesNames.size()];
+    PetscReal progressVariables[progressVariablesNames.size()];
+    PetscReal massFractions[speciesNames.size()];
+
     // call model using generalized invocation method (usable for inversion & source computation)
-    ChemTabModelComputeFunction(density, densityProgressVariables, densityEnergySource, densityProgressVariableSource, nullptr);
+    ChemTabModelComputeFunction(density, densityProgressVariables, densityEnergySource,
+                                densityProgressVariableSource, densityMassFractions);
+//    print_array("densityProgressVariables_org: ", densityProgressVariables, progressVariablesNames.size());
+//    std::cout << "||densityProgressVariables_org||_2: " << L2_norm(densityProgressVariables, progressVariablesNames.size()) << std::endl;
+//
+//    // // for assert
+//    PetscReal densityProgressVariables_cpy[progressVariablesNames.size()];
+//    //memcpy(densityProgressVariables_cpy, densityProgressVariables, progressVariablesNames.size());
+
+    // NOTE: we're now allowing it to diverge away to see what happens.
+    // We also want to apply Yi L1 constraint to the progress variables now, so that things remain physical.
+    multMemCpy(massFractions, densityMassFractions, speciesNames.size(), 1/density);
+    ComputeProgressVariables(massFractions, progressVariables); // get regular process variables from regular mass fractions
+    multMemCpy(densityProgressVariables, progressVariables, progressVariablesNames.size(), density);
+    // make progress variables into density progress variables!
+
+//    print_array("densityProgressVariables_new: ", densityProgressVariables_cpy, progressVariablesNames.size());
+//    //std::cout << "||densityProgressVariables_cpy||_2: " << L2_norm(densityProgressVariables_cpy, progressVariablesNames.size()) << std::endl;
+//    std::cout << "||densityProgressVariables_new||_2: " << L2_norm(densityProgressVariables_cpy, progressVariablesNames.size()) << std::endl;
+//    // assert that these last constraint applying operations changed the CPVs
+//    //assert(memcmp(densityProgressVariables_cpy, densityProgressVariables, progressVariablesNames.size()));
 }
 
-void ablate::eos::ChemTab::ChemistrySourceBatch(PetscReal density, const PetscReal densityProgressVariable[][], PetscReal** densityEnergySource, PetscReal** progressVariableSource) const {
+/*void ablate::eos::ChemTab::ChemistrySourceBatch(PetscReal density, const PetscReal densityProgressVariable[], PetscReal *densityEnergySource, PetscReal *progressVariableSource) const {
     // call model using generalized invocation method (usable for inversion & source computation)
     ChemTabModelComputeFunction(density, densityProgressVariable, densityEnergySource, progressVariableSource, nullptr);
-}
+}*/
 
 void ablate::eos::ChemTab::View(std::ostream &stream) const { stream << "EOS: " << type << std::endl; }
 
@@ -481,8 +533,11 @@ void ablate::eos::ChemTab::ChemTabSourceCalculator::AddSource(const ablate::doma
     // get access to the xArray, fArray
     PetscScalar *fArray;
     VecGetArray(locFVec, &fArray) >> utilities::PetscUtilities::checkError;
-    const PetscScalar *xArray;
-    VecGetArrayRead(locX, &xArray) >> utilities::PetscUtilities::checkError;
+//    const PetscScalar *xArray;
+//    VecGetArrayRead(locX, &xArray) >> utilities::PetscUtilities::checkError;
+
+    PetscScalar *xArray; // We want write access to the solution to apply Yi L1 constraint! (inplace)
+    VecGetArray(locX, &xArray) >> utilities::PetscUtilities::checkError;
 
     // Get the solution dm
     DM dm; // NOTE: DM is topological space (i.e. grid)
@@ -503,9 +558,13 @@ void ablate::eos::ChemTab::ChemTabSourceCalculator::AddSource(const ablate::doma
         PetscScalar *sourceAtCell = nullptr;
         DMPlexPointLocalRef(dm, iCell, fArray, &sourceAtCell) >> utilities::PetscUtilities::checkError;
 
-         // Get the current state variables for this cell (CPVs)
-        const PetscScalar *solutionAtCell = nullptr;
-        DMPlexPointLocalRead(dm, iCell, xArray, &solutionAtCell) >> utilities::PetscUtilities::checkError;
+        // Get the current state variables for this cell (for density & CPVs)
+        PetscScalar *solutionAtCell = nullptr; // We want write access to the solution to apply Yi L1 constraint! (inplace)
+        DMPlexPointLocalRef(dm, iCell, xArray, &solutionAtCell) >> utilities::PetscUtilities::checkError;
+
+        // // Get the current state variables for this cell (CPVs)
+        //const PetscScalar *solutionAtCell = nullptr;
+        //DMPlexPointLocalRead(dm, iCell, xArray, &solutionAtCell) >> utilities::PetscUtilities::checkError;
 
         // Def: PetscErrorCode DMPlexPointLocalRead(DM dm, PetscInt point, const PetscScalar *array, void *ptr)
         // Help: return read access to a point in local array
@@ -520,7 +579,8 @@ void ablate::eos::ChemTab::ChemTabSourceCalculator::AddSource(const ablate::doma
     }
     // cleanup
     VecRestoreArray(locFVec, &fArray) >> utilities::PetscUtilities::checkError;
-    VecRestoreArrayRead(locX, &xArray) >> utilities::PetscUtilities::checkError;
+    VecRestoreArray(locX, &xArray) >> utilities::PetscUtilities::checkError;
+//    VecRestoreArrayRead(locX, &xArray) >> utilities::PetscUtilities::checkError;
 }
 
 #endif
