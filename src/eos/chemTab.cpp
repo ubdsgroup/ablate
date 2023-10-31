@@ -325,23 +325,23 @@ void ablate::eos::ChemTab::ChemistrySource(const PetscReal density, const PetscR
     // call model using generalized invocation method (usable for inversion & source computation)
     ChemTabModelComputeFunction(density, densityProgressVariables, densityEnergySource,
                                 densityProgressVariableSource, densityMassFractions);
-//    print_array("densityProgressVariables_org: ", densityProgressVariables, progressVariablesNames.size());
-//    std::cout << "||densityProgressVariables_org||_2: " << L2_norm(densityProgressVariables, progressVariablesNames.size()) << std::endl;
-//
-//    // // for assert
-//    PetscReal densityProgressVariables_cpy[progressVariablesNames.size()];
-//    //memcpy(densityProgressVariables_cpy, densityProgressVariables, progressVariablesNames.size());
+    print_array("densityProgressVariables_org: ", densityProgressVariables, progressVariablesNames.size());
+    std::cout << "||densityProgressVariables_org||_2: " << L2_norm(densityProgressVariables, progressVariablesNames.size()) << std::endl;
+
+    // // for assert
+    PetscReal densityProgressVariables_cpy[progressVariablesNames.size()];
+    //memcpy(densityProgressVariables_cpy, densityProgressVariables, progressVariablesNames.size());
 
     // NOTE: we're now allowing it to diverge away to see what happens.
     // We also want to apply Yi L1 constraint to the progress variables now, so that things remain physical.
     multMemCpy(massFractions, densityMassFractions, speciesNames.size(), 1/density);
     ComputeProgressVariables(massFractions, progressVariables); // get regular process variables from regular mass fractions
-    multMemCpy(densityProgressVariables, progressVariables, progressVariablesNames.size(), density);
+    multMemCpy(densityProgressVariables_cpy, progressVariables, progressVariablesNames.size(), density);
     // make progress variables into density progress variables!
 
-//    print_array("densityProgressVariables_new: ", densityProgressVariables_cpy, progressVariablesNames.size());
+    print_array("densityProgressVariables_new: ", densityProgressVariables_cpy, progressVariablesNames.size());
+    std::cout << "||densityProgressVariables_new||_2: " << L2_norm(densityProgressVariables_cpy, progressVariablesNames.size()) << std::endl;
 //    //std::cout << "||densityProgressVariables_cpy||_2: " << L2_norm(densityProgressVariables_cpy, progressVariablesNames.size()) << std::endl;
-//    std::cout << "||densityProgressVariables_new||_2: " << L2_norm(densityProgressVariables_cpy, progressVariablesNames.size()) << std::endl;
 //    // assert that these last constraint applying operations changed the CPVs
 //    //assert(memcmp(densityProgressVariables_cpy, densityProgressVariables, progressVariablesNames.size()));
 }
