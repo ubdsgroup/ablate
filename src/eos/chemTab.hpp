@@ -149,15 +149,6 @@ class ChemTab : public ChemistryModel, public std::enable_shared_from_this<ChemT
     void ChemistrySource(const PetscReal density, const PetscReal densityProgressVariable[], PetscReal* densityEnergySource, PetscReal* densityProgressVariableSource) const;
 
     /**
-     * Single function to compute the source terms for a single point
-     * @param fields
-     * @param conserved
-     * @param source
-     */
-    void ChemistrySourceBatch(PetscReal* density, const PetscReal** densityProgressVariable, PetscReal** densityEnergySource, PetscReal** progressVariableSource) const;
-
-
-    /**
      * Single function to produce ChemistryFunction calculator based upon the available fields and sources.
      * @param fields in the conserved/source arrays
      * @param property

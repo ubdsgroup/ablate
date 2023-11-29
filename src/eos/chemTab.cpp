@@ -148,10 +148,6 @@ void ablate::eos::ChemTab::LoadBasisVectors(std::istream &inputStream, std::size
     }
 }
 
-// avoids freeing null pointers
-#define safe_free(ptr) \
-    if (ptr != NULL) free(ptr)
-
 // designed for adding/removing density coefficient (i.e. conserved form)
 inline void multMemCpy(const PetscReal coef, PetscReal dst[], const PetscReal src[], const int n) {
     for (int i=0; i < n; i++) {
@@ -242,25 +238,6 @@ void ablate::eos::ChemTab::ComputeMassFractions(const PetscReal *densityProgress
     ChemTabModelComputeFunction(density, densityProgressVariables, nullptr, nullptr, densityMassFractions);
 }
 
-//void ablate::eos::ChemTab::ComputeMassFractions(PetscReal *densityProgressVariables, PetscReal *densityMassFractions, const PetscReal density) const {
-//    // call model using generalized invocation method (usable for inversion & source computation)
-//    ComputeMassFractions((const PetscReal*) densityProgressVariables, densityMassFractions, density);
-//}
-
-//void ablate::eos::ChemTab::ComputeMassFractions(PetscReal *densityProgressVariables, PetscReal *densityMassFractions, const PetscReal density) const {
-//    // call model using generalized invocation method (usable for inversion & source computation)
-//    ChemTabModelComputeFunction(density, densityProgressVariables, nullptr, nullptr, densityMassFractions);
-//
-//    // We also want to apply Yi L1 constraint to the progress variables now, so that things remain physical.
-//    PetscReal* progressVariables = new PetscReal[progressVariablesNames.size()];
-//    PetscReal* massFractions = new PetscReal[speciesNames.size()];
-//    multMemCpy(1/density, massFractions, densityMassFractions, speciesNames.size());
-//    ComputeProgressVariables(massFractions, progressVariables);
-//    multMemCpy(density, densityProgressVariables, progressVariables, progressVariablesNames.size());
-//    delete[] progressVariables;
-//    delete[] massFractions;
-//}
-
 void ablate::eos::ChemTab::ComputeMassFractions(std::vector<PetscReal> &progressVariables, std::vector<PetscReal> &massFractions, PetscReal density) const {
     if (progressVariables.size() != progressVariablesNames.size()) {
         throw std::invalid_argument(
@@ -271,7 +248,6 @@ void ablate::eos::ChemTab::ComputeMassFractions(std::vector<PetscReal> &progress
     }
     // the naming is wrong on purpose so that it will conform to tests.
     ComputeMassFractions(progressVariables.data(), massFractions.data(), density);
-    //ComputeProgressVariables(massFractions.data(), progressVariables.data());
 }
 
 // Apparently only used for tests!
@@ -324,33 +300,10 @@ inline std::string print_array(std::string prefix, const PetscReal* array, const
     return ss.str();
 }
 
-void ablate::eos::ChemTab::ConstraitLogging() {
-
-}
-
-void ablate::eos::ChemTab::ChemistrySource(const PetscReal density, const PetscReal densityProgressVariables[],
-                                           PetscReal *densityEnergySource, PetscReal *densityProgressVariableSource) const {
-
-    // doesn't take time to allocate
-    PetscReal densityMassFractions[speciesNames.size()];
-    PetscReal densityProgressVariables_constrained[progressVariablesNames.size()];
-
-    // call model using generalized invocation method (usable for inversion & source computation)
-    ChemTabModelComputeFunction(density, densityProgressVariables, densityEnergySource,
-                                densityProgressVariableSource, densityMassFractions);
-
-    // NOTE: we're now allowing it to diverge away to see what happens.
-    // We also want to apply Yi L1 constraint to the progress variables now, so that things remain physical.
-    // NOTE: 1 line is enough to directly compute constrained densityProgressVariables
-    ComputeProgressVariables(densityMassFractions, densityProgressVariables_constrained);
-    //multMemCpy(1/density, massFractions, densityMassFractions, speciesNames.size());
-    //ComputeProgressVariables(massFractions, progressVariables_constrained); // get regular process variables from regular mass fractions
-    //multMemCpy(density, densityProgressVariables_constrained, progressVariables_constrained, n_CPV);
-    // make progress variables into density progress variables!
-
-    ////////////// For logging: ////////////////
-    // referenced frequently below
-    const auto n_CPV = progressVariablesNames.size();
+////////////// For logging: ////////////////
+// extracted all the slow L1 constraint debug logging (for 1 point), delete when you are finished
+void constraintLogging(const PetscReal density, const PetscReal densityProgressVariables[],
+                       const PetscReal densityProgressVariables_constrained[], const int n_CPV) {
 
     //PetscReal massFractions[speciesNames.size()];
     PetscReal progressVariables[n_CPV];
@@ -366,14 +319,29 @@ void ablate::eos::ChemTab::ChemistrySource(const PetscReal density, const PetscR
     << "||progressVariables_con||_2 = " << L2_norm(progressVariables_constrained, n_CPV) << std::endl
     << "MAE(progressVariables_org, progressVariables_con) = " << MAE(progressVariables, progressVariables_constrained, n_CPV)
     << std::endl << std::endl << std::flush;
+
     // assert that these last constraint applying operations changed the CPVs
     //assert(memcmp(densityProgressVariables_constrained, densityProgressVariables, progressVariablesNames.size()));
 }
 
-/*void ablate::eos::ChemTab::ChemistrySourceBatch(PetscReal density, const PetscReal densityProgressVariable[], PetscReal *densityEnergySource, PetscReal *progressVariableSource) const {
+void ablate::eos::ChemTab::ChemistrySource(const PetscReal density, const PetscReal densityProgressVariables[],
+                                           PetscReal *densityEnergySource, PetscReal *densityProgressVariableSource) const {
+
+    // doesn't take time to allocate
+    PetscReal densityMassFractions[speciesNames.size()];
+    PetscReal densityProgressVariables_constrained[progressVariablesNames.size()];
+
     // call model using generalized invocation method (usable for inversion & source computation)
-    ChemTabModelComputeFunction(density, densityProgressVariable, densityEnergySource, progressVariableSource, nullptr);
-}*/
+    ChemTabModelComputeFunction(density, densityProgressVariables, densityEnergySource,
+                                densityProgressVariableSource, densityMassFractions);
+
+    // NOTE: we're now allowing it to diverge away to see what happens.
+    // We also want to apply Yi L1 constraint to the progress variables now, so that things remain physical.
+    ComputeProgressVariables(densityMassFractions, densityProgressVariables_constrained);
+
+    constraintLogging(density, densityProgressVariables, densityProgressVariables_constrained,
+                      progressVariablesNames.size());
+}
 
 void ablate::eos::ChemTab::View(std::ostream &stream) const { stream << "EOS: " << type << std::endl; }
 
