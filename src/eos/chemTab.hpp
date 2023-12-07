@@ -71,7 +71,7 @@ class ChemTab : public ChemistryModel, public std::enable_shared_from_this<ChemT
         const PetscInt densityEnergyOffset;
         const PetscInt densityProgressVariableOffset;
         //! hold a pointer to the chemTabModel to compute the source terms
-        const std::shared_ptr<ChemTab> chemTabModel;
+        const std::shared_ptr<ChemTab> chemTabModel; // confirmed this is the only purpose...
 
        public:
         ChemTabSourceCalculator(PetscInt densityOffset, PetscInt densityEnergyOffset, PetscInt densityProgressVariableOffset, std::shared_ptr<ChemTab> chemTabModel);
@@ -85,6 +85,7 @@ class ChemTab : public ChemistryModel, public std::enable_shared_from_this<ChemT
          * Computes and adds the source to the supplied vector
          */
         void AddSource(const ablate::domain::Range& cellRange, Vec locSolution, Vec locSource) override;
+        // NOTE: cellRange is basically indices, locSolutions is the state, and locSource is the source field (under construction)
     };
 
     /**
@@ -212,7 +213,7 @@ class ChemTab : public ChemistryModel, public std::enable_shared_from_this<ChemT
      * @param density allows for this function to be used with density*progress variables
      *
      */
-    void ComputeMassFractions(std::vector<PetscReal>& progressVariables, std::vector<PetscReal>& massFractions, PetscReal density = 1.0) const;
+    void ComputeMassFractions(const std::vector<PetscReal>& progressVariables, std::vector<PetscReal>& massFractions, PetscReal density = 1.0) const;
 
     //    /**
     //     * helper function to compute the mass fractions = from the mass fractions progress variables

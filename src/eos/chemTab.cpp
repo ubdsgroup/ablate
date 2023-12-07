@@ -262,7 +262,7 @@ void ablate::eos::ChemTab::ChemTabModelComputeFunction(const PetscReal density[]
 //     }
 // }
 
-void ablate::eos::ChemTab::ComputeMassFractions(std::vector<PetscReal> &progressVariables, std::vector<PetscReal> &massFractions, PetscReal density) const {
+void ablate::eos::ChemTab::ComputeMassFractions(const std::vector<PetscReal> &progressVariables, std::vector<PetscReal> &massFractions, PetscReal density) const {
     if (progressVariables.size() != progressVariablesNames.size()) {
         throw std::invalid_argument("The Progress variable size is expected to be " + std::to_string(progressVariablesNames.size()));
     }
@@ -276,11 +276,19 @@ void ablate::eos::ChemTab::ComputeMassFractions(std::vector<PetscReal> &progress
 
 void ablate::eos::ChemTab::ComputeMassFractions(const PetscReal *densityProgressVariables, PetscReal *densityMassFractions, const PetscReal density) const {
     // call model using generalized invocation method (usable for inversion & source computation)
-    ChemTabModelComputeFunction(density, densityProgressVariables, nullptr, nullptr, densityMassFractions);
+    ComputeMassFractions(&densityProgressVariables, &densityMassFractions, &density, 1);
+//    ChemTabModelComputeFunction(density, densityProgressVariables, nullptr,
+//                                nullptr, densityMassFractions);
 }
 
-void ablate::eos::ChemTab::ComputeMassFractions(const PetscReal *const *densityProgressVariables, PetscReal **densityMassFractions, const PetscReal density[], size_t n) const {
-    ChemTabModelComputeFunction(density, densityProgressVariables, nullptr, nullptr, densityMassFractions, n);
+void ablate::eos::ChemTab::ComputeMassFractions(const PetscReal*const* densityProgressVariables, PetscReal** densityMassFractions,
+                                                const PetscReal density[], size_t n) const {
+    assert(progressVariablesNames.size()==speciesNames.size());
+    for (size_t i=0; i<n; i++) {
+        memcpy(densityMassFractions[i], densityProgressVariables[i], sizeof(PetscReal)*progressVariablesNames.size());
+    }
+//    ChemTabModelComputeFunction(density, densityProgressVariables, nullptr,
+//                                nullptr, densityMassFractions, n);
 }
 
 // Batched Version
@@ -344,24 +352,29 @@ void ablate::eos::ChemTab::ChemistrySource(const PetscReal *const density, const
 
 void ablate::eos::ChemTab::View(std::ostream &stream) const { stream << "EOS: " << type << std::endl; }
 
-// How does this work? should we be overriding SourceCalc class methods or this method here?
+// DummyCode which just uses TChem source calculator for Chemtab.
 std::shared_ptr<ablate::eos::ChemistryModel::SourceCalculator> ablate::eos::ChemTab::CreateSourceCalculator(const std::vector<domain::Field> &fields, const ablate::domain::Range &cellRange) {
-    // Look for the euler field
-    auto eulerField = std::find_if(fields.begin(), fields.end(), [](const auto &field) { return field.name == ablate::finiteVolume::CompressibleFlowFields::EULER_FIELD; });
-    if (eulerField == fields.end()) {
-        throw std::invalid_argument("The ablate::chemistry::ChemTabModel requires the ablate::finiteVolume::CompressibleFlowFields::EULER_FIELD Field");
-    }
-
-    auto densityProgressField = std::find_if(fields.begin(), fields.end(), [](const auto &field) { return field.name == ablate::finiteVolume::CompressibleFlowFields::DENSITY_PROGRESS_FIELD; });
-    if (densityProgressField == fields.end()) {
-        throw std::invalid_argument("The ablate::chemistry::ChemTabModel requires the ablate::finiteVolume::CompressibleFlowFields::DENSITY_PROGRESS_FIELD Field");
-    }
-
-    return std::make_shared<ChemTabSourceCalculator>(eulerField->offset + ablate::finiteVolume::CompressibleFlowFields::RHO,
-                                                     eulerField->offset + ablate::finiteVolume::CompressibleFlowFields::RHOE,
-                                                     densityProgressField->offset,
-                                                     shared_from_this());
+    return referenceEOS->CreateSourceCalculator(fields, cellRange);
 }
+
+//// How does this work? should we be overriding SourceCalc class methods or this method here?
+//std::shared_ptr<ablate::eos::ChemistryModel::SourceCalculator> ablate::eos::ChemTab::CreateSourceCalculator(const std::vector<domain::Field> &fields, const ablate::domain::Range &cellRange) {
+//    // Look for the euler field
+//    auto eulerField = std::find_if(fields.begin(), fields.end(), [](const auto &field) { return field.name == ablate::finiteVolume::CompressibleFlowFields::EULER_FIELD; });
+//    if (eulerField == fields.end()) {
+//        throw std::invalid_argument("The ablate::chemistry::ChemTabModel requires the ablate::finiteVolume::CompressibleFlowFields::EULER_FIELD Field");
+//    }
+//
+//    auto densityProgressField = std::find_if(fields.begin(), fields.end(), [](const auto &field) { return field.name == ablate::finiteVolume::CompressibleFlowFields::DENSITY_PROGRESS_FIELD; });
+//    if (densityProgressField == fields.end()) {
+//        throw std::invalid_argument("The ablate::chemistry::ChemTabModel requires the ablate::finiteVolume::CompressibleFlowFields::DENSITY_PROGRESS_FIELD Field");
+//    }
+//
+//    return std::make_shared<ChemTabSourceCalculator>(eulerField->offset + ablate::finiteVolume::CompressibleFlowFields::RHO,
+//                                                     eulerField->offset + ablate::finiteVolume::CompressibleFlowFields::RHOE,
+//                                                     densityProgressField->offset,
+//                                                     shared_from_this());
+//}
 
 ablate::eos::ThermodynamicFunction ablate::eos::ChemTab::GetThermodynamicFunction(ablate::eos::ThermodynamicProperty property, const std::vector<domain::Field> &fields) const {
     // Mask the DENSITY_YI_DECODE_FIELD for the yiField
