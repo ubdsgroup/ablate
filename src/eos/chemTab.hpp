@@ -111,6 +111,8 @@ class ChemTab : public ChemistryModel, public std::enable_shared_from_this<ChemT
      */
     static PetscErrorCode ComputeMassFractions(PetscReal time, PetscInt dim, const PetscFVCellGeom* cellGeom, const PetscInt uOff[], PetscScalar* u, void* ctx);
 
+    static std::vector<domain::Field>&& mask_DENSITY_YI_DECODE_FIELD(const std::vector<domain::Field> fields);
+
    public:
     explicit ChemTab(const std::filesystem::path& path);
     ~ChemTab() override;

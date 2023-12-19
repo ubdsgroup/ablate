@@ -352,9 +352,22 @@ void ablate::eos::ChemTab::ChemistrySource(const PetscReal *const density, const
 
 void ablate::eos::ChemTab::View(std::ostream &stream) const { stream << "EOS: " << type << std::endl; }
 
+std::vector<ablate::domain::Field>&& ablate::eos::ChemTab::mask_DENSITY_YI_DECODE_FIELD(const std::vector<domain::Field> fields) {
+    std::vector<domain::Field> fieldsCopy;
+    for (auto &field : fields) {
+        if (field.name == DENSITY_YI_DECODE_FIELD) {
+            fieldsCopy.push_back(field.Rename(ablate::finiteVolume::CompressibleFlowFields::DENSITY_YI_FIELD));
+        } else {
+            fieldsCopy.push_back(field);
+        }
+    }
+    return std::move(fieldsCopy);
+}
+
 // DummyCode which just uses TChem source calculator for Chemtab.
 std::shared_ptr<ablate::eos::ChemistryModel::SourceCalculator> ablate::eos::ChemTab::CreateSourceCalculator(const std::vector<domain::Field> &fields, const ablate::domain::Range &cellRange) {
-    return referenceEOS->CreateSourceCalculator(fields, cellRange);
+    auto fieldsCopy = mask_DENSITY_YI_DECODE_FIELD(fields); // this should fix the problem with the density Yi decode field
+    return referenceEOS->CreateSourceCalculator(fieldsCopy, cellRange);
 }
 
 //// How does this work? should we be overriding SourceCalc class methods or this method here?
@@ -377,30 +390,32 @@ std::shared_ptr<ablate::eos::ChemistryModel::SourceCalculator> ablate::eos::Chem
 //}
 
 ablate::eos::ThermodynamicFunction ablate::eos::ChemTab::GetThermodynamicFunction(ablate::eos::ThermodynamicProperty property, const std::vector<domain::Field> &fields) const {
-    // Mask the DENSITY_YI_DECODE_FIELD for the yiField
-    std::vector<domain::Field> fieldsCopy;
-    for (auto &field : fields) {
-        if (field.name == DENSITY_YI_DECODE_FIELD) {
-            fieldsCopy.push_back(field.Rename(ablate::finiteVolume::CompressibleFlowFields::DENSITY_YI_FIELD));
-        } else {
-            fieldsCopy.push_back(field);
-        }
-    }
+//    // Mask the DENSITY_YI_DECODE_FIELD for the yiField
+//    std::vector<domain::Field> fieldsCopy;
+//    for (auto &field : fields) {
+//        if (field.name == DENSITY_YI_DECODE_FIELD) {
+//            fieldsCopy.push_back(field.Rename(ablate::finiteVolume::CompressibleFlowFields::DENSITY_YI_FIELD));
+//        } else {
+//            fieldsCopy.push_back(field);
+//        }
+//    }
+    auto fieldsCopy = mask_DENSITY_YI_DECODE_FIELD(fields);
 
     // Pass the call directly into the reference eos.  It is assumed that densityYi is available
     return referenceEOS->GetThermodynamicFunction(property, fieldsCopy);
 }
 
 ablate::eos::ThermodynamicTemperatureFunction ablate::eos::ChemTab::GetThermodynamicTemperatureFunction(ablate::eos::ThermodynamicProperty property, const std::vector<domain::Field> &fields) const {
-    // Mask the DENSITY_YI_DECODE_FIELD for the yiField
-    std::vector<domain::Field> fieldsCopy;
-    for (auto &field : fields) {
-        if (field.name == DENSITY_YI_DECODE_FIELD) {
-            fieldsCopy.push_back(field.Rename(ablate::finiteVolume::CompressibleFlowFields::DENSITY_YI_FIELD));
-        } else {
-            fieldsCopy.push_back(field);
-        }
-    }
+//    // Mask the DENSITY_YI_DECODE_FIELD for the yiField
+//    std::vector<domain::Field> fieldsCopy;
+//    for (auto &field : fields) {
+//        if (field.name == DENSITY_YI_DECODE_FIELD) {
+//            fieldsCopy.push_back(field.Rename(ablate::finiteVolume::CompressibleFlowFields::DENSITY_YI_FIELD));
+//        } else {
+//            fieldsCopy.push_back(field);
+//        }
+//    }
+    auto fieldsCopy = mask_DENSITY_YI_DECODE_FIELD(fields);
     // Pass the call directly into the reference eos.  It is assumed that densityYi is available
     return referenceEOS->GetThermodynamicTemperatureFunction(property, fieldsCopy);
 }
