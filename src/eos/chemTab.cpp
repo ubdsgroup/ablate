@@ -352,7 +352,9 @@ void ablate::eos::ChemTab::ChemistrySource(const PetscReal *const density, const
 
 void ablate::eos::ChemTab::View(std::ostream &stream) const { stream << "EOS: " << type << std::endl; }
 
-std::vector<ablate::domain::Field>&& ablate::eos::ChemTab::mask_DENSITY_YI_DECODE_FIELD(const std::vector<domain::Field> fields) {
+#include <iostream>
+
+std::vector<ablate::domain::Field> ablate::eos::ChemTab::mask_DENSITY_YI_DECODE_FIELD(const std::vector<domain::Field> fields) {
     std::vector<domain::Field> fieldsCopy;
     for (auto &field : fields) {
         if (field.name == DENSITY_YI_DECODE_FIELD) {
@@ -361,7 +363,11 @@ std::vector<ablate::domain::Field>&& ablate::eos::ChemTab::mask_DENSITY_YI_DECOD
             fieldsCopy.push_back(field);
         }
     }
-    return std::move(fieldsCopy);
+    std::cout << "field names: " << std::endl;
+    for (auto field : fieldsCopy) {
+        std::cout << field << std::endl;
+    }
+    return fieldsCopy;
 }
 
 // DummyCode which just uses TChem source calculator for Chemtab.
@@ -546,18 +552,17 @@ ablate::eos::ChemTab::ChemTabSourceCalculator::ChemTabSourceCalculator(PetscInt 
                                                                        std::shared_ptr<ChemTab> chemTabModel)
     : densityOffset(densityOffset), densityEnergyOffset(densityEnergyOffset), densityProgressVariableOffset(densityProgressVariableOffset), chemTabModel(std::move(chemTabModel)) {}
 
-// NOTE: I'm not sure however I believe that this could be the ONLY place that needs updating for Batch processing??
-// Comments seem to indicate it is the case...
-void ablate::eos::ChemTab::ChemTabSourceCalculator::AddSource(const ablate::domain::Range &cellRange, Vec locX, Vec locFVec) {
-    // get access to the xArray, fArray
-    PetscScalar *fArray;
-    VecGetArray(locFVec, &fArray) >> utilities::PetscUtilities::checkError;
-    const PetscScalar *xArray;
-    VecGetArrayRead(locX, &xArray) >> utilities::PetscUtilities::checkError;
+void ablate::eos::ChemTab::ChemTabSourceCalculator::AddSource(const ablate::domain::Range &cellRange, Vec locSolution, Vec locSource) {
+    // NOTE: Vec is just a (multidimensional) pointer array!
+    // get access to our MPI portion of solArray & sourceArray
+    PetscScalar *sourceArray;
+    VecGetArray(locSource, &sourceArray) >> utilities::PetscUtilities::checkError;
+    const PetscScalar *solArray;
+    VecGetArrayRead(locSolution, &solArray) >> utilities::PetscUtilities::checkError;
 
-    // Get the solution dm
-    DM dm;  // NOTE: DM is topological space (i.e. grid)
-    VecGetDM(locFVec, &dm) >> utilities::PetscUtilities::checkError;
+    // NOTE: DM is the Vecs' metadata & topological space (i.e. grid)
+    DM dm; // Get the solution dm
+    VecGetDM(locSource, &dm) >> utilities::PetscUtilities::checkError;
 
     // Here we store the batched pointers needed for multiple chemTabModel->ChemistrySource() calls
     PetscInt buffer_len = cellRange.end - cellRange.start;
@@ -574,12 +579,13 @@ void ablate::eos::ChemTab::ChemTabSourceCalculator::AddSource(const ablate::doma
         const PetscInt iCell = cellRange.points ? cellRange.points[c] : c;
         // Dwyer: iCell is the "point"
 
+        // Get the current source variables for this cell
         PetscScalar *sourceAtCell = nullptr;
-        DMPlexPointLocalRef(dm, iCell, fArray, &sourceAtCell) >> utilities::PetscUtilities::checkError;
+        DMPlexPointLocalRef(dm, iCell, sourceArray, &sourceAtCell) >> utilities::PetscUtilities::checkError;
 
         // Get the current state variables for this cell (CPVs)
         const PetscScalar *solutionAtCell = nullptr;
-        DMPlexPointLocalRead(dm, iCell, xArray, &solutionAtCell) >> utilities::PetscUtilities::checkError;
+        DMPlexPointLocalRead(dm, iCell, solArray, &solutionAtCell) >> utilities::PetscUtilities::checkError;
         // NOTE: DMPlexPointLocalRef() is Read/Write while DMPlexPointLocalRead() is Read only
 
         // store this cell's attributes into arg vectors
@@ -596,8 +602,8 @@ void ablate::eos::ChemTab::ChemTabSourceCalculator::AddSource(const ablate::doma
     // NOTE: These "offsets" are pointers since they are CONSTANT class attributes!
 
     // cleanup
-    VecRestoreArray(locFVec, &fArray) >> utilities::PetscUtilities::checkError;
-    VecRestoreArrayRead(locX, &xArray) >> utilities::PetscUtilities::checkError;
+    VecRestoreArray(locSource, &sourceArray) >> utilities::PetscUtilities::checkError;
+    VecRestoreArrayRead(locSolution, &solArray) >> utilities::PetscUtilities::checkError;
 }
 
 #endif
