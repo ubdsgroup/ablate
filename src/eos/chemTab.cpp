@@ -147,8 +147,7 @@ void ablate::eos::ChemTab::LoadBasisVectors(std::istream &inputStream, std::size
 }
 
 // avoids freeing null pointers
-#define safe_free(ptr) \
-    if (ptr != NULL) free(ptr)
+#define safe_free(ptr) if (ptr != NULL) free(ptr)
 
 void ablate::eos::ChemTab::ChemTabModelComputeFunction(PetscReal density, const PetscReal densityProgressVariables[], PetscReal *densityEnergySource, PetscReal *densityProgressVariableSource,
                                                        PetscReal *densityMassFractions) const {
@@ -285,7 +284,8 @@ void ablate::eos::ChemTab::ComputeMassFractions(const PetscReal*const* densityPr
                                                 const PetscReal density[], size_t n) const {
     assert(progressVariablesNames.size()==speciesNames.size());
     for (size_t i=0; i<n; i++) {
-        memcpy(densityMassFractions[i], densityProgressVariables[i], sizeof(PetscReal)*progressVariablesNames.size());
+        // +1 to avoid CPV_Zmix
+        memcpy(densityMassFractions[i], densityProgressVariables[i+1], sizeof(PetscReal)*speciesNames.size());
     }
 //    ChemTabModelComputeFunction(density, densityProgressVariables, nullptr,
 //                                nullptr, densityMassFractions, n);
@@ -365,7 +365,7 @@ std::vector<ablate::domain::Field> ablate::eos::ChemTab::mask_DENSITY_YI_DECODE_
     }
     std::cout << "field names: " << std::endl;
     for (auto field : fieldsCopy) {
-        std::cout << field << std::endl;
+        std::cout << field.name << std::endl;
     }
     return fieldsCopy;
 }
